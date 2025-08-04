@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Игра: буква ↔ номер</title>
+<style>
+  body {
+    margin: 0; padding: 0;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #121212;
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    user-select: none;
+  }
+  h1 {
+    margin-bottom: 1rem;
+  }
+  #display {
+    font-size: 8rem;
+    font-weight: 900;
+    margin: 2rem 0;
+    user-select: none;
+  }
+  #prompt {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    min-height: 2em;
+  }
+  #inputAnswer {
+    font-size: 1.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: none;
+    outline: none;
+    width: 150px;
+    text-align: center;
+  }
+  #btnSubmit {
+    font-size: 1.5rem;
+    margin-left: 1rem;
+    padding: 0.5rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    background: #0a84ff;
+    color: white;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.3s ease;
+  }
+  #btnSubmit:hover {
+    background: #0066ff;
+  }
+  #feedback {
+    margin-top: 1rem;
+    height: 2em;
+    font-size: 1.3rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>Игра: буква ↔ номер</h1>
+<div id="display">A</div>
+<div id="prompt">Назовите порядковый номер буквы</div>
+<div>
+  <input id="inputAnswer" autocomplete="off" />
+  <button id="btnSubmit">Ответить</button>
+</div>
+<div id="feedback"></div>
+
+<audio id="shotSound" src="https://actions.google.com/sounds/v1/weapons/shotgun_fire.ogg" preload="auto"></audio>
+
+<script>
+(() => {
+  const displayEl = document.getElementById('display');
+  const promptEl = document.getElementById('prompt');
+  const inputEl = document.getElementById('inputAnswer');
+  const btnSubmit = document.getElementById('btnSubmit');
+  const feedbackEl = document.getElementById('feedback');
+  const shotSound = document.getElementById('shotSound');
+
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+  // Состояние игры:
+  // step = 0 — показываем букву, ждем номер
+  // step = 1 — показываем номер, ждем букву
+  let step = 0;
+  let currentIndex = 0; // индекс буквы в массиве letters
+
+  function playShot() {
+    shotSound.currentTime = 0;
+    shotSound.play();
+  }
+
+  function nextRound() {
+    // Случайный индекс буквы от 0 до 25
+    currentIndex = Math.floor(Math.random() * letters.length);
+    step = 0;
+    displayEl.textContent = letters[currentIndex];
+    promptEl.textContent = "Назовите порядковый номер буквы (от 1 до 26)";
+    inputEl.value = "";
+    inputEl.focus();
+    feedbackEl.textContent = "";
+  }
+
+  function switchStep() {
+    if (step === 0) {
+      // Было: показали букву, ждали номер
+      // Теперь показываем номер, ждем букву
+      step = 1;
+      displayEl.textContent = (currentIndex + 1).toString();
+      promptEl.textContent = "Назовите букву с этим порядковым номером";
+      inputEl.value = "";
+      inputEl.focus();
+      feedbackEl.textContent = "";
+    } else {
+      // Было: показали номер, ждали букву
+      // Начинаем новый раунд
+      nextRound();
+    }
+  }
+
+  btnSubmit.addEventListener('click', () => {
+    let answer = inputEl.value.trim().toUpperCase();
+
+    if (step === 0) {
+      // Ждём номер буквы
+      let correctNumber = (currentIndex + 1).toString();
+      if (answer === correctNumber) {
+        playShot();
+        feedbackEl.textContent = `Верно! Буква "${letters[currentIndex]}" — это номер ${correctNumber}`;
+        setTimeout(switchStep, 1200);
+      } else {
+        feedbackEl.textContent = `Неверно. Попробуйте ещё раз.`;
+        inputEl.select();
+      }
+    } else {
+      // Ждём букву
+      let correctLetter = letters[currentIndex];
+      if (answer === correctLetter) {
+        playShot();
+        feedbackEl.textContent = `Верно! Номер ${currentIndex + 1} — это буква "${correctLetter}"`;
+        setTimeout(switchStep, 1200);
+      } else {
+        feedbackEl.textContent = `Неверно. Попробуйте ещё раз.`;
+        inputEl.select();
+      }
+    }
+  });
+
+  // Позволяем нажимать Enter для ответа
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      btnSubmit.click();
+    }
+  });
+
+  nextRound();
+})();
+</script>
+
+</body>
+</html>
