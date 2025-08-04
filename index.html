@@ -3,36 +3,41 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Игра: буква ↔ номер с голосовым вводом (русский и английский)</title>
+<title>Игра: буква ↔ номер с голосовым вводом и анимацией</title>
 <style>
   body {
     margin: 0; padding: 0;
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     background: #121212;
     color: #eee;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    overflow: hidden;
     height: 100vh;
     user-select: none;
-    text-align: center;
+    position: relative;
   }
   h1 {
-    margin-bottom: 1rem;
-  }
-  #display {
-    font-size: 8rem;
-    font-weight: 900;
-    margin: 2rem 0;
+    margin: 1rem;
+    text-align: center;
     user-select: none;
   }
   #prompt {
     font-size: 1.5rem;
-    margin-bottom: 1rem;
-    min-height: 2em;
+    margin: 0 auto 1rem auto;
+    text-align: center;
+    user-select: none;
+  }
+  #feedback {
+    height: 2em;
+    font-size: 1.3rem;
+    text-align: center;
+    margin-top: 0.5rem;
+    user-select: none;
   }
   #btnSpeak {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     font-size: 1.5rem;
     padding: 0.5rem 1.5rem;
     border: none;
@@ -42,70 +47,114 @@
     cursor: pointer;
     user-select: none;
     transition: background-color 0.3s ease;
-    margin-top: 1rem;
+    z-index: 1000;
   }
   #btnSpeak.listening {
     background: #ff3b30;
   }
-  #feedback {
-    margin-top: 1rem;
-    height: 2em;
-    font-size: 1.3rem;
+  /* Стили для "плавающих" букв/чисел */
+  .floating {
+    position: absolute;
+    font-weight: 900;
+    font-size: 8rem;
+    user-select: none;
+    pointer-events: none;
+    color: #0af;
+    will-change: transform, opacity;
+  }
+  /* Анимация разлёта */
+  @keyframes flyAway {
+    to {
+      transform: translate(var(--dx), var(--dy)) rotate(var(--dr));
+      opacity: 0;
+    }
   }
 </style>
 </head>
 <body>
 
-<h1>Игра: буква ↔ номер с голосовым вводом (русский и английский)</h1>
-<div id="display">A</div>
-<div id="prompt">Назовите порядковый номер буквы</div>
-<button id="btnSpeak">Говорить</button>
+<h1>Игра: буква ↔ номер с голосовым вводом и анимацией</h1>
+<div id="prompt">Загрузка...</div>
 <div id="feedback"></div>
+<button id="btnSpeak">Запустить распознавание</button>
 
 <audio id="shotSound" src="https://actions.google.com/sounds/v1/weapons/shotgun_fire.ogg" preload="auto"></audio>
 
 <script>
 (() => {
-  const displayEl = document.getElementById('display');
   const promptEl = document.getElementById('prompt');
-  const btnSpeak = document.getElementById('btnSpeak');
   const feedbackEl = document.getElementById('feedback');
+  const btnSpeak = document.getElementById('btnSpeak');
   const shotSound = document.getElementById('shotSound');
 
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-  let step = 0; // 0 - показываем букву, ждем номер; 1 - показываем номер, ждем букву
+  let step = 0; // 0 - буква → номер, 1 - номер → буква
   let currentIndex = 0;
 
-  // Сопоставление русских и английских слов для чисел 1..26
-  // Чтобы распознанный текст можно было конвертировать в число
+  // Карта для чисел и слов (рус/англ)
   const numberMap = {
     'ONE':1, 'TWO':2, 'THREE':3, 'FOUR':4, 'FIVE':5, 'SIX':6, 'SEVEN':7, 'EIGHT':8, 'NINE':9, 'TEN':10,
     'ELEVEN':11, 'TWELVE':12, 'THIRTEEN':13, 'FOURTEEN':14, 'FIFTEEN':15, 'SIXTEEN':16, 'SEVENTEEN':17,
     'EIGHTEEN':18, 'NINETEEN':19, 'TWENTY':20, 'TWENTYONE':21, 'TWENTYTWO':22, 'TWENTYTHREE':23,
     'TWENTYFOUR':24, 'TWENTYFIVE':25, 'TWENTYSIX':26,
     '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'11':11,'12':12,'13':13,'14':14,'15':15,'16':16,'17':17,'18':18,'19':19,'20':20,'21':21,'22':22,'23':23,'24':24,'25':25,'26':26,
-    // Русские слова:
-    'ОДИН':1, 'ДВА':2, 'ТРИ':3, 'ЧЕТЫРЕ':4, 'ПЯТЬ':5, 'ШЕСТЬ':6, 'СЕМЬ':7, 'ВОСЕМЬ':8, 'ВОСЕМЬЬ':8, 'ВОСЕМ':8,
-    'ДЕВЯТЬ':9, 'ДЕВЯТ':9, 'ДЕСЯТЬ':10, 'ОДИННАДЦАТЬ':11, 'ДВЕНАДЦАТЬ':12, 'ТРИНАДЦАТЬ':13, 'ЧЕТЫРНАДЦАТЬ':14,
+    'ОДИН':1, 'ДВА':2, 'ТРИ':3, 'ЧЕТЫРЕ':4, 'ПЯТЬ':5, 'ШЕСТЬ':6, 'СЕМЬ':7, 'ВОСЕМЬ':8,
+    'ДЕВЯТЬ':9, 'ДЕСЯТЬ':10, 'ОДИННАДЦАТЬ':11, 'ДВЕНАДЦАТЬ':12, 'ТРИНАДЦАТЬ':13, 'ЧЕТЫРНАДЦАТЬ':14,
     'ПЯТНАДЦАТЬ':15, 'ШЕСТНАДЦАТЬ':16, 'СЕМНАДЦАТЬ':17, 'ВОСЕМНАДЦАТЬ':18, 'ДЕВЯТНАДЦАТЬ':19, 'ДВАДЦАТЬ':20,
-    'ДВАДЦАТЬОДИН':21, 'ДВАДЦАТЬ ДВА':22, 'ДВАДЦАТЬТРИ':23, 'ДВАДЦАТЬ ЧЕТЫРЕ':24, 'ДВАДЦАТЬПЯТЬ':25, 'ДВАДЦАТЬ ШЕСТЬ':26
+    'ДВАДЦАТЬОДИН':21, 'ДВАДЦАТЬДВА':22, 'ДВАДЦАТЬТРИ':23, 'ДВАДЦАТЬЧЕТЫРЕ':24, 'ДВАДЦАТЬПЯТЬ':25, 'ДВАДЦАТЬШЕСТЬ':26
   };
-
-  // Для букв — допускаем произношение по-английски и по-русски (А=ЭЙ, Б=БИ, С=СИ и т.п.)
-  // Но проще пока принимать только английские буквы (A-Z).
-  // Можно добавить поддержку русских названий букв, но это сложнее.
-  // В распознавании речи лучше произносить букву по-английски.
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     alert('Ваш браузер не поддерживает распознавание речи. Используйте Chrome или Edge.');
     btnSpeak.disabled = true;
+    promptEl.textContent = 'Распознавание речи не поддерживается.';
     return;
   }
   const recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU'; // Русский язык для распознавания
+  recognition.lang = 'ru-RU';
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
+  recognition.continuous = true; // Важно для непрерывного распознавания
+
+  // Показываем букву или номер в случайной позиции в пределах окна
+  function showFloating(text) {
+    const floatEl = document.createElement('div');
+    floatEl.className = 'floating';
+    floatEl.textContent = text;
+
+    // Случайная позиция с отступом, чтобы не выходило за экран
+    const pad = 100;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const x = Math.random() * (vw - pad*2) + pad;
+    const y = Math.random() * (vh - pad*2) + pad;
+
+    floatEl.style.left = `${x}px`;
+    floatEl.style.top = `${y}px`;
+
+    document.body.appendChild(floatEl);
+
+    return floatEl;
+  }
+
+  // Анимация разлёта буквы/числа с удалением элемента из DOM
+  function animateFlyAway(el) {
+    // Задаём случайное направление и вращение
+    const dx = (Math.random() - 0.5) * 400 + 'px';
+    const dy = (Math.random() - 0.5) * 400 + 'px';
+    const dr = (Math.random() - 0.5) * 720 + 'deg';
+
+    el.style.setProperty('--dx', dx);
+    el.style.setProperty('--dy', dy);
+    el.style.setProperty('--dr', dr);
+
+    el.style.animation = 'flyAway 1.2s forwards ease-out';
+
+    el.addEventListener('animationend', () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+  }
 
   function playShot() {
     shotSound.currentTime = 0;
@@ -115,40 +164,57 @@
   function nextRound() {
     currentIndex = Math.floor(Math.random() * letters.length);
     step = 0;
-    displayEl.textContent = letters[currentIndex];
-    promptEl.textContent = "Назовите порядковый номер буквы (от 1 до 26)";
     feedbackEl.textContent = "";
+    showCurrent();
   }
 
-  function switchStep() {
+  // Показываем текущий элемент (букву или номер) в случайной позиции
+  let currentFloatingEl = null;
+  function showCurrent() {
+    if (currentFloatingEl) {
+      currentFloatingEl.remove();
+      currentFloatingEl = null;
+    }
     if (step === 0) {
-      step = 1;
-      displayEl.textContent = (currentIndex + 1).toString();
-      promptEl.textContent = "Назовите букву с этим порядковым номером (произносите английскую букву)";
-      feedbackEl.textContent = "";
+      // Показываем букву
+      promptEl.textContent = "Назовите порядковый номер буквы (от 1 до 26)";
+      currentFloatingEl = showFloating(letters[currentIndex]);
     } else {
-      nextRound();
+      // Показываем номер
+      promptEl.textContent = "Назовите букву с этим порядковым номером (произносите английскую букву)";
+      currentFloatingEl = showFloating((currentIndex + 1).toString());
     }
   }
 
-  // Нормализация и попытка получить число из распознанного текста
+  function switchStep() {
+    if (currentFloatingEl) {
+      animateFlyAway(currentFloatingEl);
+      currentFloatingEl = null;
+    }
+    if (step === 0) {
+      step = 1;
+    } else {
+      nextRound();
+      return;
+    }
+    showCurrent();
+  }
+
+  // Парсим число из распознанного текста
   function parseNumber(text) {
     let t = text.toUpperCase().replace(/\s+/g, '');
     if (numberMap[t] !== undefined) return numberMap[t];
-    // Попытка извлечь число из текста (например, "два" или "2")
     let digits = t.match(/\d+/);
     if (digits) return Number(digits[0]);
     return null;
   }
 
-  // Нормализация буквы: берем первый символ A-Z
+  // Парсим букву из текста (первую латинскую букву или русские транскрипции)
   function parseLetter(text) {
     let t = text.toUpperCase().trim();
-    // Возьмем первый символ латинской буквы
     let m = t.match(/[A-Z]/);
     if (m) return m[0];
-    // Если нет латинской буквы, попробуем русские названия букв (очень упрощенно)
-    // Например, "эй" -> A, "би" -> B, "си" -> C, "ди" -> D, "и" -> I и т.д.
+    // Русские названия букв (упрощённо)
     const ruToEn = {
       'ЭЙ':'A', 'БИ':'B', 'СИ':'C', 'ДИ':'D', 'И':'E', 'ФИ':'F', 'ДЖИ':'G', 'ЭЙЧ':'H', 'АЙ':'I',
       'ДЖЕЙ':'J', 'КЕЙ':'K', 'ЭЛ':'L', 'ЭМ':'M', 'ЭН':'N', 'ОУ':'O', 'ПИ':'P', 'КЬЮ':'Q', 'АР':'R',
@@ -161,14 +227,15 @@
   }
 
   recognition.addEventListener('result', e => {
-    const speechResult = e.results[0][0].transcript;
+    const speechResult = e.results[e.results.length -1][0].transcript.trim();
+    //console.log('Распознано:', speechResult);
     if (step === 0) {
       // Ждем номер
       let num = parseNumber(speechResult);
       if (num === currentIndex + 1) {
         playShot();
         feedbackEl.textContent = `Верно! Буква "${letters[currentIndex]}" — это номер ${num}`;
-        setTimeout(switchStep, 1200);
+        switchStep();
       } else {
         feedbackEl.textContent = `Неверно. Вы сказали: "${speechResult}". Попробуйте ещё раз.`;
       }
@@ -178,7 +245,7 @@
       if (letter === letters[currentIndex]) {
         playShot();
         feedbackEl.textContent = `Верно! Номер ${currentIndex + 1} — это буква "${letters[currentIndex]}"`;
-        setTimeout(switchStep, 1200);
+        switchStep();
       } else {
         feedbackEl.textContent = `Неверно. Вы сказали: "${speechResult}". Попробуйте ещё раз.`;
       }
@@ -190,24 +257,42 @@
   });
 
   recognition.addEventListener('end', () => {
-    btnSpeak.classList.remove('listening');
-    btnSpeak.textContent = "Говорить";
-  });
-
-  btnSpeak.addEventListener('click', () => {
-    if (btnSpeak.classList.contains('listening')) {
-      recognition.stop();
-      btnSpeak.classList.remove('listening');
-      btnSpeak.textContent = "Говорить";
-    } else {
-      feedbackEl.textContent = "Слушаю...";
+    // При обрыве распознавания пытаемся запустить снова, чтобы было непрерывно
+    if (recognitionActive) {
       recognition.start();
-      btnSpeak.classList.add('listening');
-      btnSpeak.textContent = "Говорите...";
     }
   });
 
+  let recognitionActive = false;
+
+  btnSpeak.addEventListener('click', () => {
+    if (recognitionActive) {
+      recognitionActive = false;
+      recognition.stop();
+      btnSpeak.classList.remove('listening');
+      btnSpeak.textContent = "Запустить распознавание";
+      feedbackEl.textContent = "Распознавание остановлено.";
+    } else {
+      recognitionActive = true;
+      recognition.start();
+      btnSpeak.classList.add('listening');
+      btnSpeak.textContent = "Говорите...";
+      feedbackEl.textContent = "Слушаю...";
+    }
+  });
+
+  // Начинаем игру сразу, но распознавание запускается по кнопке
+  promptEl.textContent = "Нажмите кнопку ниже, чтобы начать игру";
   nextRound();
+
+  // При ресайзе окна обновим позицию текущего элемента (чтобы не выходил за экран)
+  window.addEventListener('resize', () => {
+    if (currentFloatingEl) {
+      currentFloatingEl.remove();
+      currentFloatingEl = null;
+      showCurrent();
+    }
+  });
 })();
 </script>
 
