@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Игра: буква ↔ номер с голосовым вводом и анимацией</title>
+<title>Letter-Number Game (English Alphabet) with Voice Input</title>
 <style>
   body {
     margin: 0; padding: 0;
@@ -18,20 +18,17 @@
   h1 {
     margin: 1rem;
     text-align: center;
-    user-select: none;
   }
   #prompt {
     font-size: 1.5rem;
     margin: 0 auto 1rem auto;
     text-align: center;
-    user-select: none;
   }
   #feedback {
     height: 2em;
     font-size: 1.3rem;
     text-align: center;
     margin-top: 0.5rem;
-    user-select: none;
   }
   #btnSpeak {
     position: fixed;
@@ -52,7 +49,6 @@
   #btnSpeak.listening {
     background: #ff3b30;
   }
-  /* Стили для "плавающих" букв/чисел */
   .floating {
     position: absolute;
     font-weight: 900;
@@ -62,7 +58,6 @@
     color: #0af;
     will-change: transform, opacity;
   }
-  /* Анимация разлёта */
   @keyframes flyAway {
     to {
       transform: translate(var(--dx), var(--dy)) rotate(var(--dr));
@@ -73,10 +68,10 @@
 </head>
 <body>
 
-<h1>Игра: буква ↔ номер с голосовым вводом и анимацией</h1>
-<div id="prompt">Загрузка...</div>
+<h1>Letter-Number Game (English Alphabet) with Voice Input</h1>
+<div id="prompt">Loading...</div>
 <div id="feedback"></div>
-<button id="btnSpeak">Запустить распознавание</button>
+<button id="btnSpeak">Start Recognition</button>
 
 <audio id="shotSound" src="https://actions.google.com/sounds/v1/weapons/shotgun_fire.ogg" preload="auto"></audio>
 
@@ -87,43 +82,119 @@
   const btnSpeak = document.getElementById('btnSpeak');
   const shotSound = document.getElementById('shotSound');
 
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-  let step = 0; // 0 - показываем букву, ждем номер; 1 - показываем номер, ждем букву
-  let currentIndex = 0;
+  // English alphabet letters A-Z
+  const letters = Array.from({length:26}, (_,i) => String.fromCharCode(65 + i)); // A-Z
 
-  // Словарь для чисел и их вариантов (рус/англ)
-  const numberMap = {
-    'ONE':1, 'TWO':2, 'THREE':3, 'FOUR':4, 'FIVE':5, 'SIX':6, 'SEVEN':7, 'EIGHT':8, 'NINE':9, 'TEN':10,
-    'ELEVEN':11, 'TWELVE':12, 'THIRTEEN':13, 'FOURTEEN':14, 'FIFTEEN':15, 'SIXTEEN':16, 'SEVENTEEN':17,
-    'EIGHTEEN':18, 'NINETEEN':19, 'TWENTY':20, 'TWENTYONE':21, 'TWENTYTWO':22, 'TWENTYTHREE':23,
-    'TWENTYFOUR':24, 'TWENTYFIVE':25, 'TWENTYSIX':26,
-    '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'11':11,'12':12,'13':13,'14':14,'15':15,'16':16,'17':17,'18':18,'19':19,'20':20,'21':21,'22':22,'23':23,'24':24,'25':25,'26':26,
-    'ОДИН':1, 'ДВА':2, 'ТРИ':3, 'ЧЕТЫРЕ':4, 'ПЯТЬ':5, 'ШЕСТЬ':6, 'СЕМЬ':7, 'ВОСЕМЬ':8,
-    'ДЕВЯТЬ':9, 'ДЕСЯТЬ':10, 'ОДИННАДЦАТЬ':11, 'ДВЕНАДЦАТЬ':12, 'ТРИНАДЦАТЬ':13, 'ЧЕТЫРНАДЦАТЬ':14,
-    'ПЯТНАДЦАТЬ':15, 'ШЕСТНАДЦАТЬ':16, 'СЕМНАДЦАТЬ':17, 'ВОСЕМНАДЦАТЬ':18, 'ДЕВЯТНАДЦАТЬ':19, 'ДВАДЦАТЬ':20,
-    'ДВАДЦАТЬОДИН':21, 'ДВАДЦАТЬДВА':22, 'ДВАДЦАТЬТРИ':23, 'ДВАДЦАТЬЧЕТЫРЕ':24, 'ДВАДЦАТЬПЯТЬ':25, 'ДВАДЦАТЬШЕСТЬ':26
+  // Map spoken words to numbers 1-26 (including digits and words)
+  // Include common English number words up to 26
+  const numberWords = {
+    'ONE':1,'TWO':2,'TO':2,'TOO':2,'THREE':3,'FOUR':4,'FOR':4,'FIVE':5,'SIX':6,'SEVEN':7,'EIGHT':8,'ATE':8,'NINE':9,'TEN':10,
+    'ELEVEN':11,'TWELVE':12,'THIRTEEN':13,'FOURTEEN':14,'FIFTEEN':15,'SIXTEEN':16,'SEVENTEEN':17,'EIGHTEEN':18,'NINETEEN':19,
+    'TWENTY':20,'TWENTY ONE':21,'TWENTY-ONE':21,'TWENTY TWO':22,'TWENTY-TWO':22,'TWENTY THREE':23,'TWENTY-THREE':23,
+    'TWENTY FOUR':24,'TWENTY-FOUR':24,'TWENTY FIVE':25,'TWENTY-FIVE':25,'TWENTY SIX':26,'TWENTY-SIX':26,
   };
 
+  // We'll parse recognized text to extract numbers or letters
+  // Normalize text to uppercase and trim
+  function parseAnswer(text) {
+    text = text.trim().toUpperCase();
+
+    // Try direct letter A-Z
+    if (text.length === 1 && letters.includes(text)) return {type:'letter', value: text};
+
+    // Try number as digit string
+    if (/^\d+$/.test(text)) {
+      const num = parseInt(text,10);
+      if (num >= 1 && num <= 26) return {type:'number', value: num};
+    }
+    // Try number words (some with spaces or hyphens)
+    // Replace hyphens with spaces
+    const cleaned = text.replace(/-/g, ' ');
+    if (numberWords.hasOwnProperty(cleaned)) {
+      return {type:'number', value: numberWords[cleaned]};
+    }
+    // Sometimes recognition returns multiple words, try to match first or all
+    // For example "twenty one" or "twenty one something"
+    // We'll try to find a number word prefix:
+    for (const key in numberWords) {
+      if (cleaned.startsWith(key)) {
+        return {type:'number', value: numberWords[key]};
+      }
+    }
+    // If single letter spelled out as word ("bee" → B), we can add a map for common letter names:
+    const letterNames = {
+      'A': 'A',
+      'B': 'B','BEE':'B','BE':'B',
+      'C': 'C','SEE':'C','SEA':'C',
+      'D': 'D','DEE':'D',
+      'E': 'E','EE':'E',
+      'F': 'F','EF':'F',
+      'G': 'G','GEE':'G',
+      'H': 'H','ACH':'H','AYCH':'H',
+      'I': 'I','EYE':'I',
+      'J': 'J','JAY':'J',
+      'K': 'K','KAY':'K',
+      'L': 'L','EL':'L',
+      'M': 'M','EM':'M',
+      'N': 'N','EN':'N',
+      'O': 'O','OH':'O',
+      'P': 'P','PEE':'P','PE':'P',
+      'Q': 'Q','QUEUE':'Q','CUE':'Q',
+      'R': 'R','AR':'R',
+      'S': 'S','ESS':'S',
+      'T': 'T','TEE':'T',
+      'U': 'U','YOU':'U','YOO':'U',
+      'V': 'V','VEE':'V',
+      'W': 'W','DOUBLE YOU':'W','DOUBLE-U':'W',
+      'X': 'X','EX':'X',
+      'Y': 'Y','WHY':'Y',
+      'Z': 'Z','ZED':'Z','ZEE':'Z',
+    };
+    if (letterNames.hasOwnProperty(text)) return {type:'letter', value: letterNames[text]};
+
+    return null;
+  }
+
+  // SpeechRecognition setup
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    alert('Ваш браузер не поддерживает распознавание речи. Используйте Chrome или Edge.');
+    alert('Your browser does not support Speech Recognition. Use Chrome or Edge.');
     btnSpeak.disabled = true;
-    promptEl.textContent = 'Распознавание речи не поддерживается.';
+    promptEl.textContent = 'Speech Recognition not supported.';
     return;
   }
   const recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU';
+  recognition.lang = 'en-US';
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
   recognition.continuous = true;
 
-  // Показываем букву или номер в случайной позиции в пределах окна
+  // Shuffle Fisher-Yates
+  function shuffle(array) {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex--;
+      [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
+  }
+
+  let shuffledIndexes = [];
+  let currentRound = 0;
+  let step = 0; // 0: show letter, expect number; 1: show number, expect letter
+
+  function resetGameOrder() {
+    shuffledIndexes = shuffle([...Array(letters.length).keys()]);
+    currentRound = 0;
+  }
+
   function showFloating(text) {
     const floatEl = document.createElement('div');
     floatEl.className = 'floating';
     floatEl.textContent = text;
 
-    const pad = 100;
+    const pad = 120;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const x = Math.random() * (vw - pad*2) + pad;
@@ -137,7 +208,6 @@
     return floatEl;
   }
 
-  // Анимация разлёта буквы/числа с удалением элемента из DOM
   function animateFlyAway(el) {
     const dx = (Math.random() - 0.5) * 400 + 'px';
     const dy = (Math.random() - 0.5) * 400 + 'px';
@@ -159,128 +229,102 @@
     shotSound.play();
   }
 
-  // Начинаем новый раунд с случайной буквой и случайным шагом
-  function nextRound() {
-    currentIndex = Math.floor(Math.random() * letters.length);
-    step = Math.random() < 0.5 ? 0 : 1; // случайно: 0 - показываем букву, ждем номер; 1 - показываем номер, ждем букву
-    feedbackEl.textContent = "";
-    showCurrent();
-  }
-
   let currentFloatingEl = null;
+
   function showCurrent() {
     if (currentFloatingEl) {
       currentFloatingEl.remove();
       currentFloatingEl = null;
     }
-    if (step === 0) {
-      promptEl.textContent = "Назовите порядковый номер буквы (от 1 до 26)";
-      currentFloatingEl = showFloating(letters[currentIndex]);
-    } else {
-      promptEl.textContent = "Назовите букву с этим порядковым номером (произносите английскую букву)";
-      currentFloatingEl = showFloating((currentIndex + 1).toString());
-    }
-  }
-
-  function switchStep() {
-    if (currentFloatingEl) {
-      animateFlyAway(currentFloatingEl);
-      currentFloatingEl = null;
-    }
-    if (step === 0) {
-      step = 1;
-    } else {
-      nextRound();
+    if (currentRound >= shuffledIndexes.length) {
+      promptEl.textContent = 'Game completed! Restarting...';
+      feedbackEl.textContent = '';
+      setTimeout(() => {
+        resetGameOrder();
+        step = 0;
+        showCurrent();
+      }, 3000);
       return;
     }
-    showCurrent();
-  }
-
-  // Парсим число из распознанного текста
-  function parseNumber(text) {
-    let t = text.toUpperCase().replace(/\s+/g, '');
-    if (numberMap[t] !== undefined) return numberMap[t];
-    let digits = t.match(/\d+/);
-    if (digits) return Number(digits[0]);
-    return null;
-  }
-
-  // Парсим букву из текста (первую латинскую букву или русские транскрипции)
-  function parseLetter(text) {
-    let t = text.toUpperCase().trim();
-    let m = t.match(/[A-Z]/);
-    if (m) return m[0];
-    const ruToEn = {
-      'ЭЙ':'A', 'БИ':'B', 'СИ':'C', 'ДИ':'D', 'И':'E', 'ФИ':'F', 'ДЖИ':'G', 'ЭЙЧ':'H', 'АЙ':'I',
-      'ДЖЕЙ':'J', 'КЕЙ':'K', 'ЭЛ':'L', 'ЭМ':'M', 'ЭН':'N', 'ОУ':'O', 'ПИ':'P', 'КЬЮ':'Q', 'АР':'R',
-      'ЭС':'S', 'ТИ':'T', 'Ю':'U', 'ВИ':'V', 'ДАБЛЬЮ':'W', 'ЭКС':'X', 'УАЙ':'Y', 'ЗИ':'Z'
-    };
-    for (let ruName in ruToEn) {
-      if (t.includes(ruName)) return ruToEn[ruName];
-    }
-    return null;
-  }
-
-  recognition.addEventListener('result', e => {
-    const speechResult = e.results[e.results.length -1][0].transcript.trim();
-    //console.log('Распознано:', speechResult);
+    const idx = shuffledIndexes[currentRound];
     if (step === 0) {
-      let num = parseNumber(speechResult);
-      if (num === currentIndex + 1) {
+      promptEl.textContent = "Name the position number of the letter shown (1 to 26)";
+      currentFloatingEl = showFloating(letters[idx]);
+    } else {
+      promptEl.textContent = "Name the letter corresponding to the number shown";
+      currentFloatingEl = showFloating((idx + 1).toString());
+    }
+  }
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[event.results.length - 1][0].transcript;
+    const parsed = parseAnswer(transcript);
+
+    if (!parsed) {
+      feedbackEl.textContent = `Not recognized: "${transcript.trim()}"`;
+      return;
+    }
+
+    const idx = shuffledIndexes[currentRound];
+    if (step === 0 && parsed.type === 'number') {
+      if (parsed.value === idx + 1) {
+        feedbackEl.textContent = `Correct! Letter ${letters[idx]} is number ${parsed.value}`;
         playShot();
-        feedbackEl.textContent = `Верно! Буква "${letters[currentIndex]}" — это номер ${num}`;
-        switchStep();
+        animateFlyAway(currentFloatingEl);
+        currentFloatingEl = null;
+        step = 1;
       } else {
-        feedbackEl.textContent = `Неверно. Вы сказали: "${speechResult}". Попробуйте ещё раз.`;
+        feedbackEl.textContent = `Wrong number "${parsed.value}". Try again.`;
+      }
+    } else if (step === 1 && parsed.type === 'letter') {
+      if (parsed.value === letters[idx]) {
+        feedbackEl.textContent = `Correct! Number ${idx+1} is letter ${parsed.value}`;
+        playShot();
+        animateFlyAway(currentFloatingEl);
+        currentFloatingEl = null;
+        currentRound++;
+        step = 0;
+      } else {
+        feedbackEl.textContent = `Wrong letter "${parsed.value}". Try again.`;
       }
     } else {
-      let letter = parseLetter(speechResult);
-      if (letter === letters[currentIndex]) {
-        playShot();
-        feedbackEl.textContent = `Верно! Номер ${currentIndex + 1} — это буква "${letters[currentIndex]}"`;
-        switchStep();
-      } else {
-        feedbackEl.textContent = `Неверно. Вы сказали: "${speechResult}". Попробуйте ещё раз.`;
-      }
+      feedbackEl.textContent = `Expected ${step === 0 ? 'number' : 'letter'}, but got ${parsed.type}. Try again.`;
     }
-  });
 
-  recognition.addEventListener('error', e => {
-    feedbackEl.textContent = `Ошибка распознавания речи: ${e.error}`;
-  });
+    // Show next prompt if step changed or round advanced
+    if (!currentFloatingEl) {
+      setTimeout(() => {
+        showCurrent();
+      }, 1300);
+    }
+  };
 
-  recognition.addEventListener('end', () => {
-    if (recognitionActive) recognition.start();
-  });
-
-  let recognitionActive = false;
+  recognition.onerror = (e) => {
+    feedbackEl.textContent = 'Error in recognition: ' + e.error;
+  };
+  recognition.onend = () => {
+    if (btnSpeak.classList.contains('listening')) {
+      recognition.start(); // restart recognition for continuous listening
+    }
+  };
 
   btnSpeak.addEventListener('click', () => {
-    if (recognitionActive) {
-      recognitionActive = false;
+    if (btnSpeak.classList.contains('listening')) {
       recognition.stop();
       btnSpeak.classList.remove('listening');
-      btnSpeak.textContent = "Запустить распознавание";
-      feedbackEl.textContent = "Распознавание остановлено.";
+      btnSpeak.textContent = 'Start Recognition';
+      promptEl.textContent = 'Recognition stopped.';
     } else {
-      recognitionActive = true;
       recognition.start();
       btnSpeak.classList.add('listening');
-      btnSpeak.textContent = "Говорите...";
-      feedbackEl.textContent = "Слушаю...";
+      btnSpeak.textContent = 'Stop Recognition';
+      feedbackEl.textContent = '';
+      if (!currentFloatingEl) showCurrent();
     }
   });
 
-  promptEl.textContent = "Нажмите кнопку ниже, чтобы начать игру";
-  nextRound();
-
-  window.addEventListener('resize', () => {
-    if (currentFloatingEl) {
-      currentFloatingEl.remove();
-      currentFloatingEl = null;
-      showCurrent();
-    }
-  });
+  resetGameOrder();
+  promptEl.textContent = 'Press "Start Recognition" and say answers clearly.';
 })();
 </script>
 
