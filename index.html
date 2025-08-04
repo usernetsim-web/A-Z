@@ -168,10 +168,18 @@
   recognition.lang = 'ru-RU';
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
-  recognition.continuous = true;
+  recognition.continuous = false; // НЕ непрерывный режим
+
+  function startRecognition() {
+    try {
+      recognition.start();
+    } catch(e) {
+      // Игнорируем ошибки старта, если уже запущено
+    }
+  }
 
   recognition.onresult = (event) => {
-    const transcript = event.results[event.results.length - 1][0].transcript;
+    const transcript = event.results[0][0].transcript;
     const number = findRussianNumber(transcript);
     if (number === null) {
       feedbackEl.style.color = '#ff5555';
@@ -195,7 +203,7 @@
   recognition.onerror = (e) => {
     if (e.error === 'no-speech' || e.error === 'aborted' || e.error === 'network') {
       if (btnSpeak.classList.contains('listening')) {
-        setTimeout(() => recognition.start(), 300);
+        setTimeout(() => startRecognition(), 300);
       }
     } else {
       feedbackEl.style.color = '#ff5555';
@@ -205,7 +213,7 @@
 
   recognition.onend = () => {
     if (btnSpeak.classList.contains('listening')) {
-      setTimeout(() => recognition.start(), 300);
+      setTimeout(() => startRecognition(), 300);
     }
   };
 
@@ -217,12 +225,12 @@
       promptEl.textContent = 'Распознавание остановлено.';
       feedbackEl.textContent = '';
     } else {
-      recognition.start();
+      showLetter();
       btnSpeak.classList.add('listening');
       btnSpeak.textContent = 'Остановить распознавание';
       promptEl.textContent = 'Назовите порядковый номер буквы по-русски (от 1 до 26)';
       feedbackEl.textContent = '';
-      showLetter();
+      startRecognition();
     }
   });
 
