@@ -1,219 +1,310 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Игра: Назови номер буквы (по-русски)</title>
+<title>Letter-Number Game (English Alphabet) with Voice Input</title>
 <style>
   body {
     margin: 0; padding: 0;
-    font-family: Arial, sans-serif;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     background: #121212;
     color: #eee;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    overflow: hidden;
     height: 100vh;
     user-select: none;
-    overflow: hidden;
+    position: relative;
   }
-  #letter {
-    font-size: 10rem;
-    font-weight: bold;
-    margin-bottom: 1rem;
-    user-select: none;
-    opacity: 0;
-    transition: opacity 0.7s ease;
-  }
-  #letter.visible {
-    opacity: 1;
+  h1 {
+    margin: 1rem;
+    text-align: center;
   }
   #prompt {
     font-size: 1.5rem;
-    margin-bottom: 1rem;
+    margin: 0 auto 1rem auto;
     text-align: center;
   }
   #feedback {
-    min-height: 2.5rem;
+    height: 2em;
     font-size: 1.3rem;
-    margin-bottom: 2rem;
     text-align: center;
-    user-select: none;
+    margin-top: 0.5rem;
   }
   #btnSpeak {
-    font-size: 1.2rem;
-    padding: 0.7rem 1.5rem;
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.5rem;
+    padding: 0.5rem 1.5rem;
     border: none;
     border-radius: 8px;
-    background-color: #0a84ff;
+    background: #0a84ff;
     color: white;
     cursor: pointer;
     user-select: none;
     transition: background-color 0.3s ease;
+    z-index: 1000;
   }
   #btnSpeak.listening {
-    background-color: #ff3b30;
+    background: #ff3b30;
   }
-  @keyframes flyAway {
-    0% {
-      opacity: 1;
-      transform: translate(0, 0) scale(1) rotate(0deg);
-    }
-    100% {
-      opacity: 0;
-      transform: translate(var(--dx), var(--dy)) scale(2) rotate(var(--dr));
-    }
-  }
-  .fly-away {
+  .floating {
     position: absolute;
-    font-size: 10rem;
-    font-weight: bold;
-    color: #0af;
+    font-weight: 900;
+    font-size: 8rem;
     user-select: none;
     pointer-events: none;
-    animation: flyAway 1.2s forwards ease-out;
-    z-index: 1000;
-    left: 50%;
-    top: 40%;
-    transform: translate(-50%, -50%);
+    color: #0af;
+    will-change: transform, opacity;
+  }
+  @keyframes flyAway {
+    to {
+      transform: translate(var(--dx), var(--dy)) rotate(var(--dr));
+      opacity: 0;
+    }
   }
 </style>
 </head>
 <body>
 
-<div id="letter">A</div>
-<div id="prompt">Назовите порядковый номер буквы <strong>по-русски</strong> (от 1 до 26)</div>
+<h1>Letter-Number Game (English Alphabet) with Voice Input</h1>
+<div id="prompt">Loading...</div>
 <div id="feedback"></div>
-<button id="btnSpeak">Запустить распознавание</button>
+<button id="btnSpeak">Start Recognition</button>
 
-<audio id="soundCorrect" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" preload="auto"></audio>
-<audio id="soundError" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
+<audio id="shotSound" src="https://actions.google.com/sounds/v1/weapons/shotgun_fire.ogg" preload="auto"></audio>
 
 <script>
 (() => {
-  const letterEl = document.getElementById('letter');
   const promptEl = document.getElementById('prompt');
   const feedbackEl = document.getElementById('feedback');
   const btnSpeak = document.getElementById('btnSpeak');
-  const soundCorrect = document.getElementById('soundCorrect');
-  const soundError = document.getElementById('soundError');
+  const shotSound = document.getElementById('shotSound');
 
-  const letters = Array.from({length:26}, (_,i) => String.fromCharCode(65 + i));
+  // English alphabet letters A-Z
+  const letters = Array.from({length:26}, (_,i) => String.fromCharCode(65 + i)); // A-Z
 
-  const russianNumWords = {
-    'ОДИН':1, 'ДВА':2, 'ТРИ':3, 'ЧЕТЫРЕ':4, 'ПЯТЬ':5, 'ШЕСТЬ':6, 'СЕМЬ':7, 'ВОСЕМЬ':8, 'ДЕВЯТЬ':9, 'ДЕСЯТЬ':10,
-    'ОДИННАДЦАТЬ':11, 'ДВЕНАДЦАТЬ':12, 'ТРИНАДЦАТЬ':13, 'ЧЕТЫРНАДЦАТЬ':14, 'ПЯТНАДЦАТЬ':15, 'ШЕСТНАДЦАТЬ':16,
-    'СЕМНАДЦАТЬ':17, 'ВОСЕМНАДЦАТЬ':18, 'ДЕВЯТНАДЦАТЬ':19, 'ДВАДЦАТЬ':20,
-    'ДВАДЦАТЬ ОДИН':21, 'ДВАДЦАТЬ ОДНО':21, 'ДВАДЦАТЬ ДВА':22, 'ДВАДЦАТЬ ТРИ':23, 'ДВАДЦАТЬ ЧЕТЫРЕ':24,
-    'ДВАДЦАТЬ ПЯТЬ':25, 'ДВАДЦАТЬ ШЕСТЬ':26
+  // Map spoken words to numbers 1-26 (including digits and words)
+  // Include common English number words up to 26
+  const numberWords = {
+    'ONE':1,'TWO':2,'TO':2,'TOO':2,'THREE':3,'FOUR':4,'FOR':4,'FIVE':5,'SIX':6,'SEVEN':7,'EIGHT':8,'ATE':8,'NINE':9,'TEN':10,
+    'ELEVEN':11,'TWELVE':12,'THIRTEEN':13,'FOURTEEN':14,'FIFTEEN':15,'SIXTEEN':16,'SEVENTEEN':17,'EIGHTEEN':18,'NINETEEN':19,
+    'TWENTY':20,'TWENTY ONE':21,'TWENTY-ONE':21,'TWENTY TWO':22,'TWENTY-TWO':22,'TWENTY THREE':23,'TWENTY-THREE':23,
+    'TWENTY FOUR':24,'TWENTY-FOUR':24,'TWENTY FIVE':25,'TWENTY-FIVE':25,'TWENTY SIX':26,'TWENTY-SIX':26,
   };
 
-  function findRussianNumber(text) {
-    text = text.toUpperCase().trim();
+  // We'll parse recognized text to extract numbers or letters
+  // Normalize text to uppercase and trim
+  function parseAnswer(text) {
+    text = text.trim().toUpperCase();
 
-    // Проверяем цифры 1-26
-    let digitMatch = text.match(/\b([1-9]|1[0-9]|2[0-6])\b/);
-    if (digitMatch) return parseInt(digitMatch[1], 10);
+    // Try direct letter A-Z
+    if (text.length === 1 && letters.includes(text)) return {type:'letter', value: text};
 
-    // Проверяем числительные (составные тоже)
-    for (const [key, val] of Object.entries(russianNumWords)) {
-      if (text === key) return val;
-      if (text.startsWith(key + ' ')) return val;
+    // Try number as digit string
+    if (/^\d+$/.test(text)) {
+      const num = parseInt(text,10);
+      if (num >= 1 && num <= 26) return {type:'number', value: num};
     }
+    // Try number words (some with spaces or hyphens)
+    // Replace hyphens with spaces
+    const cleaned = text.replace(/-/g, ' ');
+    if (numberWords.hasOwnProperty(cleaned)) {
+      return {type:'number', value: numberWords[cleaned]};
+    }
+    // Sometimes recognition returns multiple words, try to match first or all
+    // For example "twenty one" or "twenty one something"
+    // We'll try to find a number word prefix:
+    for (const key in numberWords) {
+      if (cleaned.startsWith(key)) {
+        return {type:'number', value: numberWords[key]};
+      }
+    }
+    // If single letter spelled out as word ("bee" → B), we can add a map for common letter names:
+    const letterNames = {
+      'A': 'A',
+      'B': 'B','BEE':'B','BE':'B',
+      'C': 'C','SEE':'C','SEA':'C',
+      'D': 'D','DEE':'D',
+      'E': 'E','EE':'E',
+      'F': 'F','EF':'F',
+      'G': 'G','GEE':'G',
+      'H': 'H','ACH':'H','AYCH':'H',
+      'I': 'I','EYE':'I',
+      'J': 'J','JAY':'J',
+      'K': 'K','KAY':'K',
+      'L': 'L','EL':'L',
+      'M': 'M','EM':'M',
+      'N': 'N','EN':'N',
+      'O': 'O','OH':'O',
+      'P': 'P','PEE':'P','PE':'P',
+      'Q': 'Q','QUEUE':'Q','CUE':'Q',
+      'R': 'R','AR':'R',
+      'S': 'S','ESS':'S',
+      'T': 'T','TEE':'T',
+      'U': 'U','YOU':'U','YOO':'U',
+      'V': 'V','VEE':'V',
+      'W': 'W','DOUBLE YOU':'W','DOUBLE-U':'W',
+      'X': 'X','EX':'X',
+      'Y': 'Y','WHY':'Y',
+      'Z': 'Z','ZED':'Z','ZEE':'Z',
+    };
+    if (letterNames.hasOwnProperty(text)) return {type:'letter', value: letterNames[text]};
+
     return null;
   }
 
-  let currentIndex = 0;
+  // SpeechRecognition setup
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert('Your browser does not support Speech Recognition. Use Chrome or Edge.');
+    btnSpeak.disabled = true;
+    promptEl.textContent = 'Speech Recognition not supported.';
+    return;
+  }
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.continuous = true;
 
-  function showLetter() {
-    letterEl.classList.remove('visible');
-    setTimeout(() => {
-      currentIndex = Math.floor(Math.random() * letters.length);
-      letterEl.textContent = letters[currentIndex];
-      letterEl.classList.add('visible');
-      feedbackEl.textContent = '';
-      feedbackEl.style.color = '#eee';
-    }, 300);
+  // Shuffle Fisher-Yates
+  function shuffle(array) {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex--;
+      [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
   }
 
-  function animateFlyAwayLetter() {
-    const flyEl = document.createElement('div');
-    flyEl.className = 'fly-away';
-    flyEl.textContent = letters[currentIndex];
-    document.body.appendChild(flyEl);
+  let shuffledIndexes = [];
+  let currentRound = 0;
+  let step = 0; // 0: show letter, expect number; 1: show number, expect letter
 
+  function resetGameOrder() {
+    shuffledIndexes = shuffle([...Array(letters.length).keys()]);
+    currentRound = 0;
+  }
+
+  function showFloating(text) {
+    const floatEl = document.createElement('div');
+    floatEl.className = 'floating';
+    floatEl.textContent = text;
+
+    const pad = 120;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const x = Math.random() * (vw - pad*2) + pad;
+    const y = Math.random() * (vh - pad*2) + pad;
+
+    floatEl.style.left = `${x}px`;
+    floatEl.style.top = `${y}px`;
+
+    document.body.appendChild(floatEl);
+
+    return floatEl;
+  }
+
+  function animateFlyAway(el) {
     const dx = (Math.random() - 0.5) * 400 + 'px';
     const dy = (Math.random() - 0.5) * 400 + 'px';
     const dr = (Math.random() - 0.5) * 720 + 'deg';
 
-    flyEl.style.setProperty('--dx', dx);
-    flyEl.style.setProperty('--dy', dy);
-    flyEl.style.setProperty('--dr', dr);
+    el.style.setProperty('--dx', dx);
+    el.style.setProperty('--dy', dy);
+    el.style.setProperty('--dr', dr);
 
-    flyEl.addEventListener('animationend', () => {
-      flyEl.remove();
+    el.style.animation = 'flyAway 1.2s forwards ease-out';
+
+    el.addEventListener('animationend', () => {
+      if (el.parentNode) el.parentNode.removeChild(el);
     });
   }
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    alert('Ваш браузер не поддерживает распознавание речи. Используйте Chrome или Edge.');
-    btnSpeak.disabled = true;
-    promptEl.textContent = 'Распознавание речи не поддерживается.';
-    return;
+  function playShot() {
+    shotSound.currentTime = 0;
+    shotSound.play();
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'ru-RU';
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-  recognition.continuous = false; // НЕ непрерывный режим
+  let currentFloatingEl = null;
 
-  function startRecognition() {
-    try {
-      recognition.start();
-    } catch(e) {
-      // Игнорируем ошибки старта, если уже запущено
+  function showCurrent() {
+    if (currentFloatingEl) {
+      currentFloatingEl.remove();
+      currentFloatingEl = null;
+    }
+    if (currentRound >= shuffledIndexes.length) {
+      promptEl.textContent = 'Game completed! Restarting...';
+      feedbackEl.textContent = '';
+      setTimeout(() => {
+        resetGameOrder();
+        step = 0;
+        showCurrent();
+      }, 3000);
+      return;
+    }
+    const idx = shuffledIndexes[currentRound];
+    if (step === 0) {
+      promptEl.textContent = "Name the position number of the letter shown (1 to 26)";
+      currentFloatingEl = showFloating(letters[idx]);
+    } else {
+      promptEl.textContent = "Name the letter corresponding to the number shown";
+      currentFloatingEl = showFloating((idx + 1).toString());
     }
   }
 
   recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    const number = findRussianNumber(transcript);
-    if (number === null) {
-      feedbackEl.style.color = '#ff5555';
-      feedbackEl.textContent = `Не распознано число в ответе: "${transcript.trim()}"`;
-      soundError.play();
+    const transcript = event.results[event.results.length - 1][0].transcript;
+    const parsed = parseAnswer(transcript);
+
+    if (!parsed) {
+      feedbackEl.textContent = `Not recognized: "${transcript.trim()}"`;
       return;
     }
-    if (number === currentIndex + 1) {
-      feedbackEl.style.color = '#55ff55';
-      feedbackEl.textContent = `Верно! Буква "${letters[currentIndex]}" — это номер ${number}`;
-      soundCorrect.play();
-      animateFlyAwayLetter();
-      setTimeout(showLetter, 1500);
+
+    const idx = shuffledIndexes[currentRound];
+    if (step === 0 && parsed.type === 'number') {
+      if (parsed.value === idx + 1) {
+        feedbackEl.textContent = `Correct! Letter ${letters[idx]} is number ${parsed.value}`;
+        playShot();
+        animateFlyAway(currentFloatingEl);
+        currentFloatingEl = null;
+        step = 1;
+      } else {
+        feedbackEl.textContent = `Wrong number "${parsed.value}". Try again.`;
+      }
+    } else if (step === 1 && parsed.type === 'letter') {
+      if (parsed.value === letters[idx]) {
+        feedbackEl.textContent = `Correct! Number ${idx+1} is letter ${parsed.value}`;
+        playShot();
+        animateFlyAway(currentFloatingEl);
+        currentFloatingEl = null;
+        currentRound++;
+        step = 0;
+      } else {
+        feedbackEl.textContent = `Wrong letter "${parsed.value}". Try again.`;
+      }
     } else {
-      feedbackEl.style.color = '#ff5555';
-      feedbackEl.textContent = `Неверно, попробуйте ещё раз. Вы сказали: ${number}`;
-      soundError.play();
+      feedbackEl.textContent = `Expected ${step === 0 ? 'number' : 'letter'}, but got ${parsed.type}. Try again.`;
+    }
+
+    // Show next prompt if step changed or round advanced
+    if (!currentFloatingEl) {
+      setTimeout(() => {
+        showCurrent();
+      }, 1300);
     }
   };
 
   recognition.onerror = (e) => {
-    if (e.error === 'no-speech' || e.error === 'aborted' || e.error === 'network') {
-      if (btnSpeak.classList.contains('listening')) {
-        setTimeout(() => startRecognition(), 300);
-      }
-    } else {
-      feedbackEl.style.color = '#ff5555';
-      feedbackEl.textContent = 'Ошибка распознавания: ' + e.error;
-    }
+    feedbackEl.textContent = 'Error in recognition: ' + e.error;
   };
-
   recognition.onend = () => {
     if (btnSpeak.classList.contains('listening')) {
-      setTimeout(() => startRecognition(), 300);
+      recognition.start(); // restart recognition for continuous listening
     }
   };
 
@@ -221,25 +312,21 @@
     if (btnSpeak.classList.contains('listening')) {
       recognition.stop();
       btnSpeak.classList.remove('listening');
-      btnSpeak.textContent = 'Запустить распознавание';
-      promptEl.textContent = 'Распознавание остановлено.';
-      feedbackEl.textContent = '';
+      btnSpeak.textContent = 'Start Recognition';
+      promptEl.textContent = 'Recognition stopped.';
     } else {
-      showLetter();
+      recognition.start();
       btnSpeak.classList.add('listening');
-      btnSpeak.textContent = 'Остановить распознавание';
-      promptEl.textContent = 'Назовите порядковый номер буквы по-русски (от 1 до 26)';
+      btnSpeak.textContent = 'Stop Recognition';
       feedbackEl.textContent = '';
-      startRecognition();
+      if (!currentFloatingEl) showCurrent();
     }
   });
 
-  showLetter();
-
+  resetGameOrder();
+  promptEl.textContent = 'Press "Start Recognition" and say answers clearly.';
 })();
 </script>
 
 </body>
 </html>
-
-Найти еще
