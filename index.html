@@ -88,10 +88,10 @@
   const shotSound = document.getElementById('shotSound');
 
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-  let step = 0; // 0 - буква → номер, 1 - номер → буква
+  let step = 0; // 0 - показываем букву, ждем номер; 1 - показываем номер, ждем букву
   let currentIndex = 0;
 
-  // Карта для чисел и слов (рус/англ)
+  // Словарь для чисел и их вариантов (рус/англ)
   const numberMap = {
     'ONE':1, 'TWO':2, 'THREE':3, 'FOUR':4, 'FIVE':5, 'SIX':6, 'SEVEN':7, 'EIGHT':8, 'NINE':9, 'TEN':10,
     'ELEVEN':11, 'TWELVE':12, 'THIRTEEN':13, 'FOURTEEN':14, 'FIFTEEN':15, 'SIXTEEN':16, 'SEVENTEEN':17,
@@ -115,7 +115,7 @@
   recognition.lang = 'ru-RU';
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
-  recognition.continuous = true; // Важно для непрерывного распознавания
+  recognition.continuous = true;
 
   // Показываем букву или номер в случайной позиции в пределах окна
   function showFloating(text) {
@@ -123,7 +123,6 @@
     floatEl.className = 'floating';
     floatEl.textContent = text;
 
-    // Случайная позиция с отступом, чтобы не выходило за экран
     const pad = 100;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -140,7 +139,6 @@
 
   // Анимация разлёта буквы/числа с удалением элемента из DOM
   function animateFlyAway(el) {
-    // Задаём случайное направление и вращение
     const dx = (Math.random() - 0.5) * 400 + 'px';
     const dy = (Math.random() - 0.5) * 400 + 'px';
     const dr = (Math.random() - 0.5) * 720 + 'deg';
@@ -161,14 +159,14 @@
     shotSound.play();
   }
 
+  // Начинаем новый раунд с случайной буквой и случайным шагом
   function nextRound() {
     currentIndex = Math.floor(Math.random() * letters.length);
-    step = 0;
+    step = Math.random() < 0.5 ? 0 : 1; // случайно: 0 - показываем букву, ждем номер; 1 - показываем номер, ждем букву
     feedbackEl.textContent = "";
     showCurrent();
   }
 
-  // Показываем текущий элемент (букву или номер) в случайной позиции
   let currentFloatingEl = null;
   function showCurrent() {
     if (currentFloatingEl) {
@@ -176,11 +174,9 @@
       currentFloatingEl = null;
     }
     if (step === 0) {
-      // Показываем букву
       promptEl.textContent = "Назовите порядковый номер буквы (от 1 до 26)";
       currentFloatingEl = showFloating(letters[currentIndex]);
     } else {
-      // Показываем номер
       promptEl.textContent = "Назовите букву с этим порядковым номером (произносите английскую букву)";
       currentFloatingEl = showFloating((currentIndex + 1).toString());
     }
@@ -214,7 +210,6 @@
     let t = text.toUpperCase().trim();
     let m = t.match(/[A-Z]/);
     if (m) return m[0];
-    // Русские названия букв (упрощённо)
     const ruToEn = {
       'ЭЙ':'A', 'БИ':'B', 'СИ':'C', 'ДИ':'D', 'И':'E', 'ФИ':'F', 'ДЖИ':'G', 'ЭЙЧ':'H', 'АЙ':'I',
       'ДЖЕЙ':'J', 'КЕЙ':'K', 'ЭЛ':'L', 'ЭМ':'M', 'ЭН':'N', 'ОУ':'O', 'ПИ':'P', 'КЬЮ':'Q', 'АР':'R',
@@ -230,7 +225,6 @@
     const speechResult = e.results[e.results.length -1][0].transcript.trim();
     //console.log('Распознано:', speechResult);
     if (step === 0) {
-      // Ждем номер
       let num = parseNumber(speechResult);
       if (num === currentIndex + 1) {
         playShot();
@@ -240,7 +234,6 @@
         feedbackEl.textContent = `Неверно. Вы сказали: "${speechResult}". Попробуйте ещё раз.`;
       }
     } else {
-      // Ждем букву
       let letter = parseLetter(speechResult);
       if (letter === letters[currentIndex]) {
         playShot();
@@ -257,10 +250,7 @@
   });
 
   recognition.addEventListener('end', () => {
-    // При обрыве распознавания пытаемся запустить снова, чтобы было непрерывно
-    if (recognitionActive) {
-      recognition.start();
-    }
+    if (recognitionActive) recognition.start();
   });
 
   let recognitionActive = false;
@@ -281,11 +271,9 @@
     }
   });
 
-  // Начинаем игру сразу, но распознавание запускается по кнопке
   promptEl.textContent = "Нажмите кнопку ниже, чтобы начать игру";
   nextRound();
 
-  // При ресайзе окна обновим позицию текущего элемента (чтобы не выходил за экран)
   window.addEventListener('resize', () => {
     if (currentFloatingEl) {
       currentFloatingEl.remove();
